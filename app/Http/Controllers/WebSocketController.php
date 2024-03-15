@@ -17,25 +17,19 @@ class WebSocketController extends Controller implements MessageComponentInterfac
         $params = $conn->httpRequest->getUri()->getQuery();
         $queryParams = [];
         parse_str($params, $queryParams);
-
-        // Now $queryParams is an associative array containing the query parameters
         $user_id = isset($queryParams['user_id']) ? $queryParams['user_id'] : null;
 
-         // Check if the user is authenticated
         if (!$this->authenticateUser($user_id)) {
-            // If the user is not authenticated, close the connection
             $conn->close();
             return;
         }
 
-        // Get friends of the user
         User::where('id', $user_id)->update([
             'user_status' => 'online'
         ]);
         $user = User::find($user_id);
         $chat_rooms = $user->chat_rooms();
 
-        // Send a message to each friend notifying them of the user's online status
         foreach ($chat_rooms as $chat_room) {
             $friend = $chat_room->sender !== null ? $chat_room->sender : $chat_room->receiver;
             if($friend->user_status == 'online') {
