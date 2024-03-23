@@ -26,6 +26,7 @@ class ChatRoomResource extends JsonResource
                 'id' => $user->id,
                 'name' => $user->name,
                 'photo' => $user->profile_picture,
+                'is_online' => $user->user_status == 'online' ? true : false
             ],
             'last_message' => $this->lastMessage->message ?? NULL
         ];
