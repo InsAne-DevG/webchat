@@ -30,7 +30,27 @@
                     case 'message':
                         this.messageEvent(eventData);
                         break;
+                    case 'online_notification':
+                        if(eventData.status == 'online'){
+                            this.getUserOnline(eventData.user_id);
+                        } else {
+                            this.getUserOffline(eventData.user_id);
+                        }
+                        break;
+
                 }
+            }
+        }
+        getUserOnline(user_id){
+            const chatRoom = chatRooms.find(room => room.details.user_details.id == user_id);
+            if(chatRoom){
+                chatRoom.online();
+            }
+        }
+        getUserOffline(user_id){
+            const chatRoom = chatRooms.find(room => room.details.user_details.id == user_id);
+            if(chatRoom){
+                chatRoom.offline();
             }
         }
         typingEvent(data) {
@@ -55,11 +75,14 @@
         messageEvent(data) {
             const chatRoom = chatRooms.find(room => room.details.chat_room_id === data.chat_room);
             if (chatRoom) {
-                chatRoom.template.querySelector('.last_message').innerText = data.message;
+                chatRoom.template.querySelector('.last_message').innerHTML = data.message;
+                if(activeChatRoom !== undefined && chatRoom !== activeChatRoom && chatRoom.template.querySelector('.unread__message__count').classList.contains('hidden')){
+                    chatRoom.template.querySelector('.unread__message__count').classList.remove('hidden');
+                }
                 chatRoom.template.querySelector('.unread__message__count').innerText = Number(chatRoom.template
                     .querySelector('.unread__message__count').innerText) + 1;
             }
-            if(chatRoom === activeChatRoom){
+            if (chatRoom === activeChatRoom) {
                 new Message({
                     chat_room: activeChatRoom.details.chat_room_id,
                     created_at: getCurrentTime(),
@@ -83,7 +106,7 @@
             }));
         }
         userAuthenticationFailed() {
-            alert('Please login first');
+            alert('Websocket Connection Failed!');
         }
     }
 
@@ -103,7 +126,7 @@
             this.template.classList.remove('hidden');
             this.template.querySelector('.message').innerHTML = this.details.message;
             this.template.querySelector('.message__time').innerText = this.details.created_at;
-            if(isAppend){
+            if (isAppend) {
                 document.getElementById('messages__ele').append(this.template);
                 this.template.scrollIntoView({
                     behavior: "smooth",
@@ -126,10 +149,28 @@
             this.template.querySelector('.user_image').src =
                 `{{ asset('profile-pictures') }}/${chatRoomDetails.user_details.photo}`;
             this.template.querySelector('.last_message').innerHTML = this.details.last_message;
-
+            this.setUserStatus();
             this.addEvents();
             this.getUnreadMessages();
             document.getElementById('chat__rooms').appendChild(this.template);
+        }
+        setUserStatus(){
+            if(this.details.user_details.is_online){
+                this.template.querySelector('.online__status').style.backgroundColor = 'rgb(74 222 128 / var(--tw-bg-opacity))';
+            } else {
+                this.template.querySelector('.online__status').style.backgroundColor = 'red';
+            }
+        }
+        online(){
+            clearTimeout(this.offlineTimeout);
+            this.details.user_details.is_online = true;
+            this.setUserStatus();
+        }
+        offline(){
+            this.offlineTimeout = setTimeout(()=>{
+                this.details.user_details.is_online = false;
+                this.setUserStatus();
+            },5000)
         }
         addEvents() {
             this.template.querySelector('.chat').addEventListener('click', (e) => {
@@ -155,8 +196,23 @@
                 document.getElementById('left__side__chat').classList.remove('hidden');
             }
             document.getElementById('active__user__name').innerText = activeChatRoom.details.user_details.name;
+            this.template.querySelector('.unread__message__count').innerText = 0;
+            if(!this.template.querySelector('.unread__message__count').classList.contains('hidden')){
+                this.template.querySelector('.unread__message__count').classList.add('hidden');
+            }
             this.emptyMessages();
             this.getMessages();
+            this.readMessage();
+        }
+        readMessage(){
+            ws.sendMessage({
+                channel: 'user_' + this.details.user_details.id,
+                data: {
+                    type: 'message_read',
+                    chat_room_id : this.details.chat_room_id,
+                    from_user: user_id
+                }
+            })
         }
         emptyMessages() {
             document.getElementById('messages__ele').innerHTML = '';
@@ -232,6 +288,10 @@
     fetchChatRooms();
 
     function sendMessage(req) {
+        if(req.data.type === 'message'){
+            activeChatRoom.template.querySelector('.unread__message__count').innerText = 0;
+            activeChatRoom.template.querySelector('.unread__message__count').classList.add('hidden');
+        };
         ws.sendMessage({
             channel: 'user_' + activeChatRoom.details.user_details.id,
             data: req.data
@@ -264,7 +324,8 @@
             sendMessage({
                 data: {
                     type: 'message',
-                    message: document.querySelector('.emojionearea-editor').innerHTML.replaceAll("&nbsp;", " "),
+                    message: document.querySelector('.emojionearea-editor').innerHTML.replaceAll(
+                        "&nbsp;", " "),
                     from_user: user_id,
                     chat_room: activeChatRoom.details.chat_room_id,
                     to_user: activeChatRoom.details.user_details.id
@@ -277,13 +338,15 @@
                 is_read: 0,
                 media_type: null,
                 media_url: null,
-                message: document.querySelector('.emojionearea-editor').innerHTML.replaceAll("&nbsp;", " "),
+                message: document.querySelector('.emojionearea-editor').innerHTML.replaceAll("&nbsp;",
+                    " "),
                 receiver_id: activeChatRoom.details.user_details.id,
                 sender_id: user_id,
                 type: "sent",
                 updated_at: getCurrentTime()
             }, true);
             emptyField();
+
         }
     });
 
@@ -293,6 +356,27 @@
             pickerPosition: "top",
             placement: 'absright',
         });
+    }
+
+    let typingTimeout;
+    let isTyping = false;
+
+    function debounceTypingEvent() {
+        clearTimeout(typingTimeout);
+        isTyping = true; // Set flag on keypress (assuming this function is called on keypress)
+        typingTimeout = setTimeout(() => {
+            if (isTyping) {
+                sendMessage({
+                    data: {
+                        type: 'typing',
+                        from_user: user_id,
+                        chat_room: activeChatRoom.details.chat_room_id,
+                        to_user: activeChatRoom.details.user_details.id
+                    }
+                });
+            }
+            isTyping = false; // Clear flag on timer completion
+        }, 300);
     }
 
     applyFilter().then(() => {
@@ -319,7 +403,8 @@
                             is_read: 0,
                             media_type: null,
                             media_url: null,
-                            message: document.querySelector('.emojionearea-editor').innerHTML.replaceAll("&nbsp;", " "),
+                            message: document.querySelector('.emojionearea-editor')
+                                .innerHTML.replaceAll("&nbsp;", " "),
                             receiver_id: activeChatRoom.details.user_details.id,
                             sender_id: user_id,
                             type: "sent",
@@ -330,16 +415,12 @@
                         })
                     }
                 } else {
-                    sendMessage({
-                        data: {
-                            type: 'typing',
-                            from_user: user_id,
-                            chat_room: activeChatRoom.details.chat_room_id,
-                            to_user: activeChatRoom.details.user_details.id
-                        }
-                    });
+                    debounceTypingEvent();
                 }
             })
+            document.querySelector('.emojionearea-editor').addEventListener("blur", () => {
+                isTyping = false;
+            });
         }, 1000);
     })
 

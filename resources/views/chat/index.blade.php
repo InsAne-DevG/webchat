@@ -230,7 +230,7 @@
             <div class="flex-2">
                 <div class="w-12 h-12 relative">
                     <img class="w-12 h-12 rounded-full mx-auto user_image" src="" alt="chat-user" style="object-fit: cover;">
-                    <span class="absolute w-4 h-4 bg-green-400 rounded-full right-0 bottom-0 border-2 border-white"></span>
+                    <span class="absolute w-4 h-4 bg-green-400 rounded-full right-0 bottom-0 border-2 border-white online__status"></span>
                 </div>
             </div>
             <div class="flex-1 px-2" style="width: 50%;">
@@ -241,7 +241,7 @@
                 <div><small class="text-gray-500">15 April</small></div>
                 <div>
                     <small class="text-xs bg-red-500 text-white rounded-full h-6 w-6 leading-6 text-center inline-block unread__message__count hidden">
-                        23
+                        0
                     </small>
                 </div>
             </div>
